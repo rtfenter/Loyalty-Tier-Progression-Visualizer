@@ -34,7 +34,8 @@ The prototype includes:
 
 ## Demo Screenshot
 
-> (Screenshot to be added after MVP implementation.)
+<img width="2804" height="2124" alt="Screenshot 2025-11-25 at 09-07-29 Loyalty Tier Progression Visualizer" src="https://github.com/user-attachments/assets/66882280-85a9-4faf-ba9e-3d577cce383c" />
+
 
 ---
 
@@ -105,7 +106,7 @@ https://github.com/rtfenter/loyalty-series
 
 ## Status  
 
-MVP design defined.  
+MVP is active and implemented.  
 Frontend implementation in progress — this tool will stay lightweight, focused on explaining tier progression rather than building a full production rules engine.
 
 ---
