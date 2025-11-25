@@ -96,10 +96,9 @@ function resetBars() {
   tierRows.forEach((row) => row.classList.remove("current"));
 }
 
-function updateLadder(normalizedSpend) {
+function updateLadder(normalizedSpendForScenario) {
   resetBars();
 
-  // For each tier, compute progress between its threshold and the next one.
   const maxIndex = tiers.length - 1;
   const tierBars = [barMemberEl, barSilverEl, barGoldEl, barPlatinumEl];
 
@@ -109,20 +108,19 @@ function updateLadder(normalizedSpend) {
     const end = index === maxIndex ? tier.threshold * 1.5 : tiers[index + 1].threshold;
 
     let progress = 0;
-    if (normalizedSpend <= start) {
+    if (normalizedSpendForScenario <= start) {
       progress = 0;
-    } else if (normalizedSpend >= end) {
+    } else if (normalizedSpendForScenario >= end) {
       progress = 1;
     } else {
-      progress = (normalizedSpend - start) / (end - start);
+      progress = (normalizedSpendForScenario - start) / (end - start);
     }
 
     const clamped = Math.max(0, Math.min(1, progress));
     barEl.style.transform = `scaleX(${clamped})`;
   });
 
-  // Highlight current tier row
-  const currentIndex = findCurrentTierIndex(normalizedSpend);
+  const currentIndex = findCurrentTierIndex(normalizedSpendForScenario);
   tierRows.forEach((row) => {
     const idx = parseInt(row.getAttribute("data-tier-index"), 10);
     if (idx === currentIndex) {
@@ -154,77 +152,143 @@ function visualizeScenario() {
 
   calcStatusEl.textContent = "";
 
-  const normalizedSpend = currentSpendLocal * fx.rate;
+  // Baseline: current spend only
+  const baselineNormalized = currentSpendLocal * fx.rate;
+
+  // Scenario: include extra spend * multiplier
   const normalizedExtra = extraSpendLocal > 0 ? extraSpendLocal * fx.rate : 0;
-
   const effectiveExtra = normalizedExtra * partnerMultiplier;
-  const totalEffective = normalizedSpend + effectiveExtra;
+  const scenarioNormalized = baselineNormalized + effectiveExtra;
 
-  const currentTierIndex = findCurrentTierIndex(normalizedSpend);
-  const effectiveTierIndex = findCurrentTierIndex(totalEffective);
-  const currentTier = tiers[currentTierIndex];
+  const hasSimulatedSpend = extraSpendLocal > 0 && effectiveExtra > 0;
 
-  const nextTierIndex = Math.min(currentTierIndex + 1, tiers.length - 1);
+  // Which value should drive messaging + ladder?
+  const normalizedForMessaging = hasSimulatedSpend ? scenarioNormalized : baselineNormalized;
+
+  // Tier indices for both states
+  const baselineTierIndex = findCurrentTierIndex(baselineNormalized);
+  const scenarioTierIndex = findCurrentTierIndex(scenarioNormalized);
+  const messagingTierIndex = hasSimulatedSpend ? scenarioTierIndex : baselineTierIndex;
+
+  const messagingTier = tiers[messagingTierIndex];
+
+  const nextTierIndex =
+    messagingTierIndex === tiers.length - 1
+      ? tiers.length - 1
+      : Math.min(messagingTierIndex + 1, tiers.length - 1);
   const nextTier = tiers[nextTierIndex];
 
   let gapToNext = 0;
-  if (currentTierIndex === tiers.length - 1) {
+  if (messagingTierIndex === tiers.length - 1) {
     gapToNext = 0;
   } else {
-    gapToNext = nextTier.threshold - normalizedSpend;
+    gapToNext = nextTier.threshold - normalizedForMessaging;
     if (gapToNext < 0) gapToNext = 0;
   }
 
-  const gapLocal = gapToNext / fx.rate;
+  const gapLocal =
+    fx.rate > 0 && gapToNext > 0 ? gapToNext / fx.rate : gapToNext <= 0 ? 0 : NaN;
   const gapLocalWithMultiplier =
-    partnerMultiplier > 0 ? gapToNext / (fx.rate * partnerMultiplier) : gapLocal;
+    partnerMultiplier > 0 && gapToNext > 0
+      ? gapToNext / (fx.rate * partnerMultiplier)
+      : gapLocal;
 
-  // Summary badge & text
-  if (currentTierIndex === tiers.length - 1) {
-    updateSummaryBadge("ok", "Member is already at top-tier status.");
-    summaryTextEl.textContent = `Normalized qualifying spend is ${formatCurrency(
-      normalizedSpend,
-      "USD"
-    )}, which sits in the ${currentTier.name} band. Additional spend is not required to reach a higher tier.`;
+  // Summary badge + text (now based on scenario if simulated, otherwise baseline)
+  if (messagingTierIndex === tiers.length - 1) {
+    if (hasSimulatedSpend) {
+      updateSummaryBadge("ok", "Scenario: member reaches top-tier status.");
+      summaryTextEl.textContent = `Under this scenario, normalized qualifying spend is ${formatCurrency(
+        normalizedForMessaging,
+        "USD"
+      )}, which sits in the ${messagingTier.name} band. Additional spend is not required to reach a higher tier in this model.`;
+    } else {
+      updateSummaryBadge("ok", "Member is already at top-tier status.");
+      summaryTextEl.textContent = `Normalized qualifying spend is ${formatCurrency(
+        normalizedForMessaging,
+        "USD"
+      )}, which sits in the ${messagingTier.name} band. Additional spend is not required to reach a higher tier in this model.`;
+    }
   } else if (gapToNext === 0) {
     updateSummaryBadge("ok", "Member is eligible for the next tier based on spend.");
     summaryTextEl.textContent = `Normalized qualifying spend is ${formatCurrency(
-      normalizedSpend,
+      normalizedForMessaging,
       "USD"
-    )}, which already meets the ${nextTier.name} threshold.`;
+    )}, which meets the ${nextTier.name} threshold in this simplified ladder.`;
   } else {
-    updateSummaryBadge("ok", `Sitting in ${currentTier.name} — ${nextTier.name} in reach.`);
-    summaryTextEl.textContent = `Normalized qualifying spend is ${formatCurrency(
-      normalizedSpend,
-      "USD"
-    )}, which sits in the ${currentTier.name} band. The member needs about ${formatCurrency(
-      gapToNext,
-      "USD"
-    )} more normalized spend to reach ${nextTier.name}.`;
+    if (hasSimulatedSpend) {
+      updateSummaryBadge("ok", `Scenario: sitting in ${messagingTier.name} — ${nextTier.name} in reach.`);
+      summaryTextEl.textContent = `Under this scenario, normalized qualifying spend is ${formatCurrency(
+        normalizedForMessaging,
+        "USD"
+      )}, which sits in the ${messagingTier.name} band. The member needs about ${formatCurrency(
+        gapToNext,
+        "USD"
+      )} more normalized spend to reach ${nextTier.name}.`;
+    } else {
+      updateSummaryBadge("ok", `Sitting in ${messagingTier.name} — ${nextTier.name} in reach.`);
+      summaryTextEl.textContent = `Normalized qualifying spend is ${formatCurrency(
+        normalizedForMessaging,
+        "USD"
+      )}, which sits in the ${messagingTier.name} band. The member needs about ${formatCurrency(
+        gapToNext,
+        "USD"
+      )} more normalized spend to reach ${nextTier.name}.`;
+    }
   }
 
-  // Metrics
-  normalizedLineEl.innerHTML = `Region <strong>${fx.label}</strong> (${fx.currency}) normalizes <strong>${formatCurrency(
-    currentSpendLocal,
-    fx.currency
-  )}</strong> into approximately <strong>${formatCurrency(normalizedSpend, "USD")}</strong> of base program spend.`;
-
-  if (currentTierIndex === tiers.length - 1) {
-    gapLineEl.innerHTML = `This member is already in <strong>${currentTier.name}</strong>, the top tier in this simplified ladder. There is no higher threshold in this model.`;
-  } else {
-    gapLineEl.innerHTML = `Next tier: <strong>${nextTier.name}</strong> at ${formatCurrency(
-      nextTier.threshold,
-      "USD"
-    )}. Remaining gap: about <strong>${formatCurrency(
-      gapToNext,
-      "USD"
-    )}</strong> base, or roughly <strong>${formatCurrency(
-      gapLocal,
+  // Normalized line — show baseline + scenario if applicable
+  if (hasSimulatedSpend) {
+    normalizedLineEl.innerHTML = `Region <strong>${fx.label}</strong> (${fx.currency}) normalizes baseline spend of <strong>${formatCurrency(
+      currentSpendLocal,
       fx.currency
-    )}</strong> in local currency without any multiplier.`;
+    )}</strong> into approximately <strong>${formatCurrency(
+      baselineNormalized,
+      "USD"
+    )}</strong>. With the simulated partner spend, total effective progress is about <strong>${formatCurrency(
+      scenarioNormalized,
+      "USD"
+    )}</strong> in base program currency.`;
+  } else {
+    normalizedLineEl.innerHTML = `Region <strong>${fx.label}</strong> (${fx.currency}) normalizes <strong>${formatCurrency(
+      currentSpendLocal,
+      fx.currency
+    )}</strong> into approximately <strong>${formatCurrency(
+      baselineNormalized,
+      "USD"
+    )}</strong> of base program spend.`;
   }
 
-  if (extraSpendLocal > 0 && gapToNext > 0) {
+  // Gap line — now also based on messaging state (baseline vs scenario)
+  if (messagingTierIndex === tiers.length - 1) {
+    gapLineEl.innerHTML = `This member sits in <strong>${messagingTier.name}</strong>, the top tier in this simplified ladder. There is no higher threshold in this model.`;
+  } else {
+    if (hasSimulatedSpend) {
+      gapLineEl.innerHTML = `In this scenario, the next tier is <strong>${nextTier.name}</strong> at ${formatCurrency(
+        nextTier.threshold,
+        "USD"
+      )}. Remaining gap after simulated spend: about <strong>${formatCurrency(
+        gapToNext,
+        "USD"
+      )}</strong> base, or roughly <strong>${formatCurrency(
+        gapLocalWithMultiplier,
+        fx.currency
+      )}</strong> in local currency when the same multiplier applies.`;
+    } else {
+      gapLineEl.innerHTML = `Next tier: <strong>${nextTier.name}</strong> at ${formatCurrency(
+        nextTier.threshold,
+        "USD"
+      )}. Remaining gap: about <strong>${formatCurrency(
+        gapToNext,
+        "USD"
+      )}</strong> base, or roughly <strong>${formatCurrency(
+        gapLocal,
+        fx.currency
+      )}</strong> in local currency without any multiplier.`;
+    }
+  }
+
+  // Multiplier line
+  if (hasSimulatedSpend && gapToNext > 0) {
     const closesGapPercent =
       gapToNext > 0 ? Math.min(1, effectiveExtra / gapToNext) * 100 : 0;
     multiplierLineEl.innerHTML = `A single partner transaction of <strong>${formatCurrency(
@@ -238,8 +302,15 @@ function visualizeScenario() {
     )} of status progress and closes about <strong>${formatNumber(
       closesGapPercent,
       0
-    )}%</strong> of the gap to the next tier.`;
-  } else if (gapToNext > 0) {
+    )}%</strong> of the remaining gap to the next tier in this scenario.`;
+  } else if (hasSimulatedSpend && gapToNext === 0) {
+    multiplierLineEl.innerHTML = `The simulated partner transaction of <strong>${formatCurrency(
+      extraSpendLocal,
+      fx.currency
+    )}</strong> at <strong>${partnerMultiplier.toFixed(
+      2
+    )}x</strong> is enough to remove the gap to <strong>${nextTier.name}</strong> in this simplified ladder.`;
+  } else if (!hasSimulatedSpend && gapToNext > 0) {
     multiplierLineEl.innerHTML = `At <strong>${partnerMultiplier.toFixed(
       2
     )}x</strong>, each unit of partner spend accelerates status progress. Add a simulated amount to see the effect on the gap to the next tier.`;
@@ -247,32 +318,18 @@ function visualizeScenario() {
     multiplierLineEl.innerHTML = `Partner multipliers still matter here — they can help maintain higher-tier status or offset FX disadvantages across markets.`;
   }
 
-  // Ladder visualization
-  updateLadder(totalEffective);
+  // Ladder visualization — use messaging scenario (baseline or scenario)
+  updateLadder(normalizedForMessaging);
 
-  // Raw output
+  // Raw output: show both baseline and scenario clearly
   const detailsLines = [
     `Region: ${fx.label} (${fx.currency})`,
     `FX rate to base: ${fx.rate}`,
     "",
-    `Current qualifying spend (local): ${formatCurrency(currentSpendLocal, fx.currency)}`,
-    `Normalized spend (base): ${formatCurrency(normalizedSpend, "USD")}`,
+    `Baseline qualifying spend (local): ${formatCurrency(currentSpendLocal, fx.currency)}`,
+    `Baseline normalized spend (base): ${formatCurrency(baselineNormalized, "USD")}`,
+    `Baseline tier band: ${tiers[baselineTierIndex].name}`,
     "",
-    `Current tier band (based on normalized spend): ${currentTier.name}`,
-    currentTierIndex === tiers.length - 1
-      ? "Next tier: none (top tier)."
-      : `Next tier: ${nextTier.name} at ${formatCurrency(nextTier.threshold, "USD")}`,
-    "",
-    `Gap to next tier (base): ${
-      currentTierIndex === tiers.length - 1 ? "N/A" : formatCurrency(gapToNext, "USD")
-    }`,
-    `Gap to next tier (local, no multiplier): ${
-      currentTierIndex === tiers.length - 1
-        ? "N/A"
-        : formatCurrency(gapLocal, fx.currency)
-    }`,
-    "",
-    `Partner multiplier: ${partnerMultiplier.toFixed(2)}x`,
     `Simulated additional spend (local): ${
       isNaN(extraSpendLocal) || extraSpendLocal <= 0
         ? "none"
@@ -284,13 +341,24 @@ function visualizeScenario() {
         : formatCurrency(effectiveExtra, "USD")
     }`,
     "",
-    `Effective total (normalized + simulated * multiplier): ${formatCurrency(
-      totalEffective,
-      "USD"
-    )}`,
-    `Effective tier band (normalized + simulated * multiplier): ${
-      tiers[effectiveTierIndex].name
-    }`
+    `Scenario normalized total (baseline + simulated * multiplier): ${
+      hasSimulatedSpend ? formatCurrency(scenarioNormalized, "USD") : "same as baseline"
+    }`,
+    `Scenario tier band: ${tiers[scenarioTierIndex].name}`,
+    "",
+    `Tier used for messaging in this view: ${messagingTier.name}`,
+    messagingTierIndex === tiers.length - 1
+      ? "Next tier: none (top tier in this model)."
+      : `Next tier in this view: ${nextTier.name} at ${formatCurrency(
+          nextTier.threshold,
+          "USD"
+        )}`,
+    gapToNext > 0
+      ? `Remaining gap to next tier (base, in this view): ${formatCurrency(
+          gapToNext,
+          "USD"
+        )}`
+      : "Remaining gap to next tier (base, in this view): none in this simplified ladder."
   ];
 
   rawOutputEl.textContent = detailsLines.join("\n");
@@ -308,6 +376,6 @@ function loadExample() {
 visualizeBtn.addEventListener("click", visualizeScenario);
 loadExampleBtn.addEventListener("click", loadExample);
 
-// Optional: run once with example on first load (comment out if you don't want auto-run)
+// Optional: run once with example on first load
 loadExample();
 visualizeScenario();
