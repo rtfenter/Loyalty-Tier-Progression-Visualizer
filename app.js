@@ -248,7 +248,7 @@ function visualizeScenario() {
   }
 
   // Ladder visualization
-  updateLadder(normalizedSpend);
+  updateLadder(totalEffective);
 
   // Raw output
   const detailsLines = [
