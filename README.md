@@ -36,32 +36,33 @@ The prototype includes:
 
 <img width="2804" height="2124" alt="Screenshot 2025-11-25 at 09-07-29 Loyalty Tier Progression Visualizer" src="https://github.com/user-attachments/assets/66882280-85a9-4faf-ba9e-3d577cce383c" />
 
-
 ---
 
 ## Tier Progression Flow Diagram
 
-    [Region + Current Spend/Points + Tier]
-                      |
-                      v
-            FX Normalization Layer
-         (convert to base program currency)
-                      |
-                      v
-            Tier Thresholds Engine
-         (Silver / Gold / Platinum cutoffs)
-                      |
-                      v
-          Partner & Campaign Multipliers
-              (1.5x partner, 2x promo)
-                      |
-                      v
-         Effective Progress Calculation
-       (normalized_progress = base + boosts)
-                      |
-                      v
-           Tier Progress Visualization
-      (bars for current tier + next tier)
+```
+[Region + Current Spend/Points + Tier]
+                  |
+                  v
+        FX Normalization Layer
+     (convert to base program currency)
+                  |
+                  v
+        Tier Thresholds Engine
+     (Silver / Gold / Platinum cutoffs)
+                  |
+                  v
+      Partner & Campaign Multipliers
+          (1.5x partner, 2x promo)
+                  |
+                  v
+     Effective Progress Calculation
+   (normalized_progress = base + boosts)
+                  |
+                  v
+       Tier Progress Visualization
+  (bars for current tier + next tier)
+```
 
 ---
 
@@ -100,7 +101,7 @@ The UI has to explain complex rule stacks in one bar. This prototype focuses on 
 ## Part of the Loyalty Systems Series
 
 Main repo:  
-https://github.com/rtfenter/loyalty-series
+https://github.com/rtfenter/Loyalty-Systems-Series
 
 ---
 
@@ -113,9 +114,9 @@ Frontend implementation in progress — this tool will stay lightweight, focused
 
 ## Local Use
 
-No installation required.
+Everything runs client-side.
 
 1. Clone the repo  
 2. Open `index.html` in your browser  
-
-Everything runs client-side.
+   
+That’s it — no backend required.
